@@ -161,20 +161,24 @@ css2mp4/
 │   │   ├── lib.rs           # 公開モジュール定義・re-export
 │   │   ├── error.rs         # 共通エラー定義 (Error, Result)
 │   │   ├── options.rs       # レンダリング設定 (RenderOptions)
-│   │   ├── browser/         # ヘッドレスブラウザ & CDP 制御
+│   │   ├── browser/         # ヘッドレスブラウザ & DOM 解析
 │   │   │   ├── mod.rs
-│   │   │   ├── capturer.rs  # ブラウザ起動・仮想時間同期・PNGキャプチャ
-│   │   │   ├── sampler.rs   # CSS Computed Style サンプリング & 行列分解
+│   │   │   ├── launcher.rs  # Chrome 検出 & ブラウザ起動
+│   │   │   ├── animation.rs # CDP Animation 仮想時間制御
+│   │   │   ├── capturer.rs  # スクリーンショットキャプチャ
+│   │   │   ├── matrix.rs    # Transform 行列分解・幾何計算
+│   │   │   ├── sampler.rs   # CSS Computed Style サンプリング
 │   │   │   └── url.rs       # file:// URL 変換
 │   │   ├── encoder/         # 動画エンコード & FFmpeg 連携
 │   │   │   ├── mod.rs
-│   │   │   ├── ffmpeg.rs    # FFmpeg プロセス管理 & stdin ストリーミング
-│   │   │   └── format.rs    # 出力形式 (VideoFormat) & 引数生成
+│   │   │   ├── format.rs    # 出力形式 (VideoFormat) 定義
+│   │   │   ├── command.rs   # FFmpeg 引数ビルダー
+│   │   │   └── process.rs   # 子プロセス管理 & stdin ストリーミング
 │   │   ├── ymmp/            # YMM4 (.ymmp) ドメイン
 │   │   │   ├── mod.rs
-│   │   │   ├── model.rs     # プロジェクト / タイムライン / アイテム構造
-│   │   │   ├── property.rs  # アニメーションプロパティ / キーフレーム / ベジェ
-│   │   │   ├── optimizer.rs # キーフレーム間引き・極値検出オプティマイザ
+│   │   │   ├── model/       # データモデル (Project, Timeline, Item, VideoInfo)
+│   │   │   ├── property/    # アニメーションプロパティ & ベジェ曲線
+│   │   │   ├── optimizer/   # キーフレーム間引き (RDP) & ピーク検出
 │   │   │   ├── io.rs        # UTF-8 BOM 対応の読み込み & 保存
 │   │   │   └── motion.rs    # サンプリングデータ (MotionSamples) と適用処理
 │   │   └── pipeline/        # 高レベルオーケストレーション
@@ -187,20 +191,10 @@ css2mp4/
 └── css2mp4-cli/             # CLI バイナリ
     └── src/
         ├── main.rs          # エントリポイント（ルーティング）
-        ├── args.rs          # clap 引数・サブコマンド定義
-        ├── commands/        # 各サブコマンド処理
-        │   ├── mod.rs
-        │   ├── render.rs
-        │   ├── export_ymmp.rs
-        │   └── serve.rs
-        ├── server/          # Axum REST + SSE API サーバー
-        │   ├── mod.rs
-        │   ├── state.rs
-        │   ├── routes.rs
-        │   └── handlers/
-        └── ui/              # CLI UI
-            ├── mod.rs
-            └── progress.rs  # indicatif プログレスバー
+        ├── args/            # clap 引数・サブコマンド定義 (Render, ExportYmmp, Serve)
+        ├── commands/        # 各サブコマンド実行処理
+        ├── server/          # Axum REST + SSE API サーバー (handlers, routes, state)
+        └── ui/              # CLI UI (indicatif プログレスバー)
 ```
 
 ---

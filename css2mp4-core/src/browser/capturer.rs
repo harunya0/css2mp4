@@ -1,133 +1,84 @@
-use std::collections::HashSet;
-use std::time::Duration;
-
-use chromiumoxide::browser::{Browser, BrowserConfig};
-use chromiumoxide::cdp::browser_protocol::animation::{
-    EnableParams as AnimationEnableParams, EventAnimationStarted, SeekAnimationsParams,
-    SetPlaybackRateParams,
-};
+use chromiumoxide::cdp::browser_protocol::emulation::SetDefaultBackgroundColorOverrideParams;
 use chromiumoxide::cdp::browser_protocol::page::CaptureScreenshotFormat;
-use chromiumoxide::page::{Page, ScreenshotParams};
-use futures::StreamExt;
+use chromiumoxide::page::ScreenshotParams;
+use chromiumoxide::{Browser, Page};
 
-use crate::browser::sampler::{build_sampling_script, RawStyleSample, StyleSample};
+use crate::browser::animation::AnimationController;
+use crate::browser::launcher::BrowserLauncher;
+use crate::browser::sampler::ComputedSample;
 use crate::browser::url::to_file_url;
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::options::RenderOptions;
 
-/// CSS アニメーションを仕込んだページを開き、CDP の `Animation` ドメインを使って
-/// 決定論的にフレームをキャプチャ・サンプリングするためのハンドル。
+/// ヘッドレス Chromium を操作し、ページの仮想時間シークと PNG キャプチャを行うキャプチャエンジン。
 pub struct FrameCapturer {
     _browser: Browser,
-    _handler_task: tokio::task::JoinHandle<()>,
     page: Page,
     animation_ids: Vec<String>,
+    _handle: tokio::task::JoinHandle<()>,
 }
 
 impl FrameCapturer {
-    /// ヘッドレスブラウザを起動し、対象ページのアニメーションを検出・停止させた状態で初期化する。
+    /// 与えられたレンダリング設定に基づき、ブラウザを起動して対象ページをロードします。
     pub async fn launch(opts: &RenderOptions) -> Result<Self> {
-        let mut builder = BrowserConfig::builder()
-            .window_size(opts.width, opts.height)
-            .viewport(chromiumoxide::handler::viewport::Viewport {
-                width: opts.width,
-                height: opts.height,
-                device_scale_factor: Some(1.0),
-                ..Default::default()
-            });
-
-        if let Some(chrome) = &opts.chrome_path {
-            builder = builder.chrome_executable(chrome);
-        }
-
-        let config = builder.build().map_err(Error::BrowserLaunch)?;
-
-        let (browser, mut handler) = Browser::launch(config)
-            .await
-            .map_err(|e| Error::BrowserLaunch(e.to_string()))?;
-
-        // chromiumoxide は Handler を poll し続けないと CDP メッセージが処理されないため、
-        // バックグラウンドタスクとして回す。
-        let handler_task = tokio::spawn(async move {
-            while let Some(_event) = handler.next().await {}
-        });
-
-        let input_url = to_file_url(&opts.input);
+        let (browser, handle) = BrowserLauncher::launch(opts).await?;
         let page = browser.new_page("about:blank").await?;
 
-        // ページ読み込み前に Animation ドメインを有効化
-        page.execute(AnimationEnableParams {}).await?;
-
-        let mut animation_events = page.event_listener::<EventAnimationStarted>().await?;
-
-        page.goto(input_url.as_str()).await?;
-
-        // アニメーション ID を収集
-        let mut animation_ids: HashSet<String> = HashSet::new();
-        let collect_deadline = tokio::time::sleep(Duration::from_millis(300));
-        tokio::pin!(collect_deadline);
-        loop {
-            tokio::select! {
-                _ = &mut collect_deadline => break,
-                maybe_event = animation_events.next() => {
-                    match maybe_event {
-                        Some(evt) => {
-                            animation_ids.insert(evt.animation.id.clone());
-                        }
-                        None => break,
-                    }
-                }
-            }
+        // 透過背景が必要な場合は、ブラウザの背景色を透明に設定
+        if opts.transparent {
+            let bg_override = SetDefaultBackgroundColorOverrideParams {
+                color: Some(chromiumoxide::cdp::browser_protocol::dom::Rgba {
+                    r: 0,
+                    g: 0,
+                    b: 0,
+                    a: Some(0.0),
+                }),
+            };
+            page.execute(bg_override).await?;
         }
 
-        // タイムラインの自動再生を停止（以降は seekAnimations でシーク制御）
-        page.execute(SetPlaybackRateParams { playback_rate: 0.0 })
-            .await?;
+        // ページをロードし、アニメーション ID を収集＆自動再生停止
+        let target_url = to_file_url(&opts.input);
+        let animation_ids =
+            AnimationController::initialize_and_collect_ids(&page, &target_url).await?;
 
-        Ok(Self {
+        Ok(FrameCapturer {
             _browser: browser,
-            _handler_task: handler_task,
             page,
-            animation_ids: animation_ids.into_iter().collect(),
+            animation_ids,
+            _handle: handle,
         })
     }
 
-    /// `time_seconds` 時点までアニメーションをシークし、PNG スクリーンショットを取得する。
-    pub async fn capture_frame_png(&self, time_seconds: f64, transparent: bool) -> Result<Vec<u8>> {
-        self.seek_to(time_seconds).await?;
+    /// 指定された時間（秒）へアニメーションをシークし、PNG スクリーンショットを取得します。
+    pub async fn capture_frame(&self, time_seconds: f64) -> Result<Vec<u8>> {
+        AnimationController::seek(&self.page, &self.animation_ids, time_seconds * 1000.0).await?;
 
-        let params = ScreenshotParams::builder()
+        let screenshot_params = ScreenshotParams::builder()
             .format(CaptureScreenshotFormat::Png)
-            .omit_background(transparent)
+            .from_surface(true)
             .build();
 
-        let png = self.page.screenshot(params).await?;
-        Ok(png)
+        let png_bytes = self.page.screenshot(screenshot_params).await?;
+        Ok(png_bytes)
     }
 
-    /// `time_seconds` 時点までアニメーションをシークし、指定セレクタの要素からスタイルをサンプリングする。
-    pub async fn sample_style(&self, selector: &str, time_seconds: f64) -> Result<StyleSample> {
-        self.seek_to(time_seconds).await?;
-
-        let script = build_sampling_script(selector);
-        let raw: RawStyleSample = self.page.evaluate(script).await?.into_value()?;
-        Ok(raw.into())
+    /// `capture_frame` のエイリアス。
+    pub async fn capture_frame_png(
+        &self,
+        time_seconds: f64,
+        _transparent: bool,
+    ) -> Result<Vec<u8>> {
+        self.capture_frame(time_seconds).await
     }
 
-    /// アニメーションを指定秒数位置へシークする。
-    async fn seek_to(&self, time_seconds: f64) -> Result<()> {
-        if !self.animation_ids.is_empty() {
-            self.page
-                .execute(SeekAnimationsParams {
-                    animations: self.animation_ids.clone(),
-                    current_time: time_seconds * 1000.0,
-                })
-                .await?;
-        }
-        Ok(())
+    /// 指定セレクタの要素の Computed Style を指定時刻でサンプリングします。
+    pub async fn sample_style(&self, selector: &str, time_seconds: f64) -> Result<ComputedSample> {
+        AnimationController::seek(&self.page, &self.animation_ids, time_seconds * 1000.0).await?;
+        crate::browser::sampler::sample_element_style(&self.page, selector).await
     }
 
-    /// 検出されたアニメーションの件数。
+    /// 検出されたアニメーションの件数を返します。
     pub fn animation_count(&self) -> usize {
         self.animation_ids.len()
     }
