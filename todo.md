@@ -12,6 +12,7 @@
 - [x] CSS プロパティ（Transform / Opacity）を時系列サンプリングして `.ymmp` 用 JSON を生成する API の実装 (`YmmpProject`, `MotionSamples`)
   - [x] `DOMMatrixReadOnly` による行列分解（移動量・回転・スケール）
   - [x] UTF-8 BOM 付き JSON のラウンドトリップ（フィールド欠落防止）
+- [x] HTML 文字列 / 一時ファイルからの単発プレビューフレーム生成 API の実装 (`preview_frame`)
 
 ## フェーズ 2: CLI ラッパーの実装 (`css2mp4-cli`)
 - [x] clap を用いた CLI コマンド・オプションの定義
@@ -22,9 +23,11 @@
 - [x] 実行時エラーのハンドリング（Chromium / FFmpeg が見つからない場合の警告等）
 
 ## フェーズ 3: API インターフェース拡張（フロントエンド接続準備）
-- [ ] Axum 等を用いたローカル HTTP / WebSocket API エンドポイントの実装 (`serve` コマンド)
-- [ ] フロントエンドからの HTML / CSS 送信とプレビュー用フレーム取得 API の実装
-- [ ] エクスポート進捗をリアルタイム通知するイベント配信 (SSE / WebSocket) の実装
+- [x] Axum を用いたローカル HTTP / SSE API エンドポイントの実装 (`serve` コマンド)
+- [x] フロントエンドからの HTML / CSS 送信とプレビュー用フレーム取得 API の実装 (`POST /api/preview`)
+- [x] 非同期レンダリングタスク作成 API の実装 (`POST /api/render`)
+- [x] エクスポート進捗をリアルタイム通知するイベント配信 (SSE) の実装 (`GET /api/render/:id/events`)
+- [x] 生成動画ダウンロード API の実装 (`GET /api/render/:id/download`)
 
 ## 今後の改善・検討課題
 - [ ] **YMM4 キーフレーム仕様の追加検証**:

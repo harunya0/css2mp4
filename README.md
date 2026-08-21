@@ -111,26 +111,75 @@ css2mp4-cli export-ymmp input.html \
 
 ---
 
+### 3. ローカル API サーバーの起動 (`serve`)
+
+フロントエンド（Web UI / 外部ツール等）からプレビュー生成や非同期動画エクスポート、SSEによる進捗監視を行うための REST + SSE サーバーを起動します。
+
+```bash
+# デフォルト（127.0.0.1:3000）で起動
+css2mp4-cli serve
+
+# ポート番号やバインドホストを指定して起動
+css2mp4-cli serve --host 0.0.0.0 --port 8080
+```
+
+#### 提供される API エンドポイント
+| メソッド | エンドポイント | 説明 |
+| :--- | :--- | :--- |
+| `GET` | `/api/health` | サーバーの死活確認 |
+| `POST` | `/api/preview` | HTML/CSS 文字列とシーク秒数から 1 フレームの PNG 画像を取得 |
+| `POST` | `/api/render` | 非同期レンダリングタスクを作成し `task_id` を返却 |
+| `GET` | `/api/render/:task_id` | タスクの現在の進捗・ステータスを取得 |
+| `GET` | `/api/render/:task_id/events` | **SSE (Server-Sent Events)** によるリアルタイム進捗ストリーム |
+| `GET` | `/api/render/:task_id/download` | レンダリング完了した動画ファイル（MP4 / WebM）をダウンロード |
+
+---
+
 ## プロジェクト構成
 
 ```text
-css-motion-generation/
+css2mp4/
 ├── Cargo.toml               # ワークスペース定義
 ├── README.md                # 本ドキュメント
 ├── todo.md                  # 開発ロードマップ & TODO
 ├── css2mp4-core/            # コアライブラリ
 │   ├── src/
-│   │   ├── lib.rs           # 公開モジュール定義
-│   │   ├── options.rs       # 設定構造体 (RenderOptions, VideoFormat)
-│   │   ├── capture.rs       # CDP (chromiumoxide) 制御・仮想時間フレームキャプチャ
-│   │   ├── encode.rs        # FFmpeg プロセスパイプ連携
-│   │   ├── render.rs        # 高レベル API (render_video, overwrite_ymmp_motion)
-│   │   ├── ymmp.rs          # .ymmp (UTF-8 BOM付きJSON) 解析・キーフレーム生成
-│   │   └── error.rs         # エラー定義
+│   │   ├── lib.rs           # 公開モジュール定義・re-export
+│   │   ├── error.rs         # 共通エラー定義 (Error, Result)
+│   │   ├── options.rs       # レンダリング設定 (RenderOptions)
+│   │   ├── browser/         # ヘッドレスブラウザ & CDP 制御
+│   │   │   ├── mod.rs
+│   │   │   ├── capturer.rs  # ブラウザ起動・仮想時間同期・PNGキャプチャ
+│   │   │   ├── sampler.rs   # CSS Computed Style サンプリング & 行列分解
+│   │   │   └── url.rs       # file:// URL 変換
+│   │   ├── encoder/         # 動画エンコード & FFmpeg 連携
+│   │   │   ├── mod.rs
+│   │   │   ├── ffmpeg.rs    # FFmpeg プロセス管理 & stdin ストリーミング
+│   │   │   └── format.rs    # 出力形式 (VideoFormat) & 引数生成
+│   │   ├── ymmp/            # YMM4 (.ymmp) ドメイン
+│   │   │   ├── mod.rs
+│   │   │   ├── model.rs     # プロジェクト / タイムライン / アイテム構造
+│   │   │   ├── property.rs  # アニメーションプロパティ / キーフレーム / ベジェ
+│   │   │   ├── io.rs        # UTF-8 BOM 対応の読み込み & 保存
+│   │   │   └── motion.rs    # サンプリングデータ (MotionSamples) と適用処理
+│   │   └── pipeline/        # 高レベルオーケストレーション
+│   │       ├── mod.rs
+│   │       ├── progress.rs  # 進捗通知トレイト (ProgressSink, NoopProgress)
+│   │       ├── video.rs     # 動画レンダリングパイプライン (render_video)
+│   │       └── ymmp.rs      # YMM4 モーション上書きパイプライン (overwrite_ymmp_motion)
 │   └── tests/               # YMMP 読み書き・ラウンドトリップテスト
-└── css2mp4-cli/             # CLI 実装
+└── css2mp4-cli/             # CLI バイナリ
     └── src/
-        └── main.rs          # clap コマンドライン引数処理・プログレスバー表示
+        ├── main.rs          # エントリポイント（ルーティング）
+        ├── args.rs          # clap 引数・サブコマンド定義
+        ├── commands/        # 各サブコマンド処理
+        │   ├── mod.rs
+        │   ├── render.rs
+        │   ├── export_ymmp.rs
+        │   └── serve.rs
+        └── ui/              # CLI UI
+            ├── mod.rs
+            └── progress.rs  # indicatif プログレスバー
 ```
 
 ---

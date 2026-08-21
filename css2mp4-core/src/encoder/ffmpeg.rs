@@ -3,40 +3,31 @@ use std::process::Stdio;
 use tokio::io::AsyncWriteExt;
 use tokio::process::{Child, Command};
 
+use crate::encoder::format::VideoFormat;
 use crate::error::{Error, Result};
-use crate::options::{RenderOptions, VideoFormat};
+use crate::options::RenderOptions;
 
-/// PNGフレーム列をstdin経由でffmpegに流し込み、動画ファイルへエンコードするパイプ。
+/// PNG フレーム列を stdin 経由で FFmpeg に流し込み、動画ファイルへエンコードするパイプライン。
 ///
-/// `image2pipe` デマルチプレクサでPNGフレームを連結ストリームとして渡すため、
-/// フレームを一度もディスクへ書き出さずに済む。
+/// `image2pipe` デマルチプレクサで PNG フレームを連結ストリームとして渡すため、
+/// フレームをディスクへ一切書き出さずに高速処理できます。
 pub struct FfmpegEncoder {
     child: Child,
     format: VideoFormat,
 }
 
 impl FfmpegEncoder {
+    /// FFmpeg プロセスを子プロセスとして起動し、入力パイプを開く。
     pub fn spawn(opts: &RenderOptions, format: VideoFormat) -> Result<Self> {
         let mut cmd = Command::new(&opts.ffmpeg_path);
-        cmd.arg("-y") // 出力ファイルを上書き
+        cmd.arg("-y") // 上書き許可
             .args(["-loglevel", "error"])
             .args(["-f", "image2pipe"])
             .args(["-framerate", &opts.fps.to_string()])
             .args(["-i", "-"]);
 
-        match format {
-            VideoFormat::Mp4 => {
-                cmd.args(["-c:v", "libx264"])
-                    .args(["-pix_fmt", "yuv420p"])
-                    .args(["-movflags", "+faststart"]);
-            }
-            VideoFormat::WebmTransparent => {
-                cmd.args(["-c:v", "libvpx-vp9"])
-                    .args(["-pix_fmt", "yuva420p"])
-                    // アルファチャンネルを保持するために alt-ref を無効化する。
-                    .args(["-auto-alt-ref", "0"]);
-            }
-        }
+        // コーデック・ピクセルフォーマット引数を追加
+        cmd.args(format.ffmpeg_args());
 
         cmd.arg(&opts.output);
 
@@ -49,7 +40,7 @@ impl FfmpegEncoder {
         Ok(Self { child, format })
     }
 
-    /// PNGフレームを1枚書き込む。
+    /// PNG フレームを 1 枚 FFmpeg の stdin に書き込む。
     pub async fn write_frame(&mut self, png_bytes: &[u8]) -> Result<()> {
         let stdin = self
             .child
@@ -60,9 +51,9 @@ impl FfmpegEncoder {
         Ok(())
     }
 
-    /// stdinを閉じてffmpegの終了を待ち、成功したかどうかを確認する。
+    /// stdin を閉じて FFmpeg の終了を待ち、エンコード結果を検証する。
     pub async fn finish(mut self) -> Result<()> {
-        // stdin をdropしてEOFを送る。
+        // stdin を drop して EOF を送信
         drop(self.child.stdin.take());
 
         let output = self
@@ -78,7 +69,7 @@ impl FfmpegEncoder {
             });
         }
 
-        let _ = self.format; // フォーマットは主にログ/デバッグ用に保持している
+        let _ = self.format;
         Ok(())
     }
 }
