@@ -42,7 +42,7 @@ fn round_trip_is_lossless_at_json_value_level() {
 }
 
 #[test]
-fn overwrite_motion_updates_expected_fields() {
+fn overwrite_motion_updates_expected_fields_and_keyframes() {
     let mut project = YmmpProject::load(FIXTURE).unwrap();
     let item = project.item_mut(0, 0).unwrap();
 
@@ -55,15 +55,28 @@ fn overwrite_motion_updates_expected_fields() {
     };
     samples.overwrite_item(item, 2.0 / 24.0).unwrap();
 
+    // KeyFrames が 3要素（中間点 2個）に同期されていることを検証
+    let keyframes = item.fields.get("KeyFrames").unwrap();
+    assert_eq!(keyframes.get("Count").unwrap().as_i64(), Some(2));
+    assert_eq!(
+        keyframes.get("Frames").unwrap().as_array().unwrap().len(),
+        2
+    );
+
+    // X は変化するので "直線移動"
     let x = item.get_animatable("X").unwrap();
     assert_eq!(x.values.len(), 3);
     assert_eq!(x.values[2].value, 20.0);
+    assert_eq!(x.animation_type, "直線移動");
 
-    // Zoomは1要素だったので静的値として扱われる。
+    // Zoom は値が一定なので 3 要素にパディングされつつ "なし"
     let zoom = item.get_animatable("Zoom").unwrap();
-    assert_eq!(zoom.values.len(), 1);
+    assert_eq!(zoom.values.len(), 3);
+    assert_eq!(zoom.values[0].value, 100.0);
+    assert_eq!(zoom.values[2].value, 100.0);
     assert_eq!(zoom.animation_type, "なし");
 
     let opacity = item.get_animatable("Opacity").unwrap();
     assert_eq!(opacity.values.len(), 3);
+    assert_eq!(opacity.animation_type, "直線移動");
 }

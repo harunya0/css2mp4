@@ -5,9 +5,10 @@ use serde::{Deserialize, Serialize};
 pub struct AnimatableProperty {
     #[serde(rename = "Values")]
     pub values: Vec<ValueEntry>,
-    /// アニメーション区間の長さ。
+    /// アニメーション区間の長さ（通常 0.0）。
     #[serde(rename = "Span")]
     pub span: f64,
+    /// 移動方式（"なし", "直線移動", "加減速移動" など）。
     #[serde(rename = "AnimationType")]
     pub animation_type: String,
     #[serde(rename = "Bezier")]
@@ -79,11 +80,18 @@ impl AnimatableProperty {
     }
 
     /// 複数フレームのサンプリング値をキーフレームとして生成する。
-    pub fn from_keyframes(values: &[f64], span_seconds: f64) -> Self {
+    ///
+    /// YMM4 の Enum（YukkuriMovieMaker.Commons.AnimationType）に合わせて
+    /// 複数値時は "直線移動"、単一値時は "なし" を指定します。
+    pub fn from_keyframes(values: &[f64]) -> Self {
         AnimatableProperty {
             values: values.iter().map(|&v| ValueEntry { value: v }).collect(),
-            span: span_seconds,
-            animation_type: "自動".to_string(),
+            span: 0.0,
+            animation_type: if values.len() > 1 {
+                "直線移動".to_string()
+            } else {
+                "なし".to_string()
+            },
             bezier: Bezier::default_linear(),
         }
     }
