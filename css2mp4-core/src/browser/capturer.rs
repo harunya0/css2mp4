@@ -61,7 +61,6 @@ impl FrameCapturer {
         let mut animation_events = page.event_listener::<EventAnimationStarted>().await?;
 
         page.goto(input_url.as_str()).await?;
-        page.wait_for_navigation().await?;
 
         // アニメーション ID を収集
         let mut animation_ids: HashSet<String> = HashSet::new();
