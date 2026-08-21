@@ -12,13 +12,15 @@
 - [x] CSS プロパティ（Transform / Opacity）を時系列サンプリングして `.ymmp` 用 JSON を生成する API の実装 (`YmmpProject`, `MotionSamples`)
   - [x] `DOMMatrixReadOnly` による行列分解（移動量・回転・スケール）
   - [x] UTF-8 BOM 付き JSON のラウンドトリップ（フィールド欠落防止）
+  - [x] YMM4 内部 Enum (`直線移動` / `なし`) との完全互換対応
+  - [x] **RDP & 極値検出によるキーフレーム（中間点）自動削減・最適化オプティマイザ** (`ymmp/optimizer.rs`)
 - [x] HTML 文字列 / 一時ファイルからの単発プレビューフレーム生成 API の実装 (`preview_frame`)
 
 ## フェーズ 2: CLI ラッパーの実装 (`css2mp4-cli`)
 - [x] clap を用いた CLI コマンド・オプションの定義
 - [x] コア API を呼び出す CLI サブコマンドの実装
   - [x] `render`: 動画レンダリング (MP4 / 透過 WebM)
-  - [x] `export-ymmp`: 既存 `.ymmp` 内アイテムへのモーション上書き
+  - [x] `export-ymmp`: 既存 `.ymmp` 内アイテムへのモーション上書き（`--tolerance` による間引き調整対応）
 - [x] indicatif を用いたレンダリング進捗プログレスバーの表示
 - [x] 実行時エラーのハンドリング（Chromium / FFmpeg が見つからない場合の警告等）
 
@@ -30,8 +32,6 @@
 - [x] 生成動画ダウンロード API の実装 (`GET /api/render/:id/download`)
 
 ## 今後の改善・検討課題
-- [ ] **YMM4 キーフレーム仕様の追加検証**:
-  - 実環境でキーフレームアニメーションを設定した `.ymmp` サンプルの収集と `AnimationType` / `Span` / イージングカーブ仕様の整合性検証
 - [ ] **バッチ処理・複数セレクタ対応**:
   - 複数要素のモーションを一度にサンプリングして複数アイテムに適用する機能
 - [ ] **パフォーマンス最適化**:

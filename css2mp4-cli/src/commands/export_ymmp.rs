@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use css2mp4_core::options::RenderOptions;
-use css2mp4_core::pipeline::overwrite_ymmp_motion;
+use css2mp4_core::pipeline::overwrite_ymmp_motion_with_tolerance;
 
 use crate::args::ExportYmmpArgs;
 use crate::ui::CliProgress;
@@ -24,13 +24,14 @@ pub async fn handle_export_ymmp(args: ExportYmmpArgs) -> Result<()> {
     let output_path = args.output.unwrap_or_else(|| args.ymmp.clone());
     let progress = CliProgress::new();
 
-    overwrite_ymmp_motion(
+    overwrite_ymmp_motion_with_tolerance(
         &opts,
         &args.selector,
         &args.ymmp,
         &output_path,
         args.timeline_index,
         args.item_index,
+        args.tolerance,
         progress,
     )
     .await?;

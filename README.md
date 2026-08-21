@@ -12,10 +12,11 @@ CSS アニメーションで定義されたモーションを、高品質な動�
   キャプチャした PNG フレームをパイプ経由（`image2pipe`）で直接 FFmpeg に流し込み、ディスクへの無駄な中間ファイル書き出しを行いません。
 - **透過動画のサポート**  
   アルファチャンネル付きの背景透過 WebM（VP9 コーデック）出力に対応しており、動画編集ソフトへの素材合成に最適です。
-- **ゆっくりMovieMaker4 (YMM4) 連携**  
-  CSS で記述した `transform`（移動・回転・拡縮）や `opacity`（不透明度）をフレームごとに解析・サンプリングし、既存 `.ymmp` ファイル内のアイテムのキーフレームとして直接上書き反映できます。
-- **モジュラー設計**  
-  コア機能は独立した Rust クレート（`css2mp4-core`）として設計されており、CLI だけでなく将来的な Web サーバー / GUI アプリケーション（Tauri 等）への組み込みが容易です。
+- **ゆっくりMovieMaker4 (YMM4) 連携 & キーフレーム最適化**  
+  CSS で記述した `transform`（移動・回転・拡縮）や `opacity`（不透明度）を解析・サンプリングし、既存 `.ymmp` ファイル内のアイテムのキーフレームとして上書き反映できます。  
+  **RDP (Ramer-Douglas-Peucker) アルゴリズムと極値検出**により、冗長な中間点を最大 90% 削減。YMM4 タイムライン上で管理しやすいクリーンなキーフレームを自動生成します。
+- **モジュラー設計 & REST/SSE API サーバー**  
+  コア機能は独立した Rust クレート（`css2mp4-core`）として設計。CLI に加え、Axum ベースのローカル API サーバー（`serve`）を標準搭載しており、Web UI や外部ツールからのリアルタイムプレビュー・進捗監視が可能です。
 
 ---
 
@@ -35,7 +36,7 @@ CSS アニメーションで定義されたモーションを、高品質な動�
 
 ```bash
 git clone <repository-url>
-cd css-motion-generation
+cd css2mp4
 
 # リリースビルド
 cargo build --release
@@ -88,13 +89,20 @@ css2mp4-cli render input.html -o output.mp4 \
 HTML 内の指定要素（CSS セレクタ）のアニメーション軌跡をサンプリングし、既存の YMM4 プロジェクトファイル（`.ymmp`）内のアイテムにキーフレーム情報として注入します。
 
 ```bash
-# #target 要素のアニメーションを sample.ymmp のタイムライン 0, アイテム 0 に上書き
+# 基本的なエクスポート（中間点を自動間引きして綺麗に出力）
 css2mp4-cli export-ymmp input.html \
   --selector "#target" \
   --ymmp sample.ymmp \
   -o output.ymmp \
-  --fps 60 \
   --duration 3.0
+
+# 中間点削減の許容誤差（tolerance）を指定（数値を大きくするほど中間点が少なくなります）
+css2mp4-cli export-ymmp input.html \
+  --selector "#target" \
+  --ymmp sample.ymmp \
+  -o output.ymmp \
+  --duration 3.0 \
+  --tolerance 2.0
 ```
 
 #### 主なオプション (`export-ymmp`)
@@ -104,10 +112,12 @@ css2mp4-cli export-ymmp input.html \
 | `--selector` | *(必須)* | モーションサンプリング対象の CSS セレクタ（例: `#target`, `.box`） |
 | `--ymmp` | *(必須)* | 上書き対象の既存 `.ymmp` ファイルのパス |
 | `-o, --output` | *(省略時は `--ymmp` を上書き)* | 書き出し先の `.ymmp` ファイルパス |
+| `--tolerance` | `0.5` | キーフレーム削減の許容誤差（px / %）。`0` を指定すると全フレームベイク |
 | `--timeline-index`| `0` | 対象タイムラインのインデックス（0始まり） |
 | `--item-index` | `0` | 対象アイテムのインデックス（0始まり） |
 | `--fps` | `60` | サンプリング密度（fps） |
 | `--duration` | `3.0` | サンプリング時間（秒） |
+| `--chrome` | *(自動検出)* | Chromium / Chrome 実行ファイルのパス |
 
 ---
 
@@ -144,7 +154,8 @@ css2mp4/
 ├── todo.md                  # 開発ロードマップ & TODO
 ├── samples/                 # HTML / CSS モーションサンプル集
 │   ├── 01-pop-in/           # ポップアップカード（バウンド・拡大）
-│   └── 02-slide-badge/      # スライドインバッジ
+│   ├── 02-slide-badge/      # スライドインバッジ
+│   └── README.md            # サンプル実行ガイド
 ├── css2mp4-core/            # コアライブラリ
 │   ├── src/
 │   │   ├── lib.rs           # 公開モジュール定義・re-export
@@ -163,12 +174,14 @@ css2mp4/
 │   │   │   ├── mod.rs
 │   │   │   ├── model.rs     # プロジェクト / タイムライン / アイテム構造
 │   │   │   ├── property.rs  # アニメーションプロパティ / キーフレーム / ベジェ
+│   │   │   ├── optimizer.rs # キーフレーム間引き・極値検出オプティマイザ
 │   │   │   ├── io.rs        # UTF-8 BOM 対応の読み込み & 保存
 │   │   │   └── motion.rs    # サンプリングデータ (MotionSamples) と適用処理
 │   │   └── pipeline/        # 高レベルオーケストレーション
 │   │       ├── mod.rs
 │   │       ├── progress.rs  # 進捗通知トレイト (ProgressSink, NoopProgress)
 │   │       ├── video.rs     # 動画レンダリングパイプライン (render_video)
+│   │       ├── preview.rs   # プレビュー生成パイプライン (preview_frame)
 │   │       └── ymmp.rs      # YMM4 モーション上書きパイプライン (overwrite_ymmp_motion)
 │   └── tests/               # YMMP 読み書き・ラウンドトリップテスト
 └── css2mp4-cli/             # CLI バイナリ
@@ -180,6 +193,11 @@ css2mp4/
         │   ├── render.rs
         │   ├── export_ymmp.rs
         │   └── serve.rs
+        ├── server/          # Axum REST + SSE API サーバー
+        │   ├── mod.rs
+        │   ├── state.rs
+        │   ├── routes.rs
+        │   └── handlers/
         └── ui/              # CLI UI
             ├── mod.rs
             └── progress.rs  # indicatif プログレスバー
@@ -191,6 +209,7 @@ css2mp4/
 
 - **言語**: Rust (Edition 2021)
 - **CLI フレームワーク**: [clap](https://github.com/clap-rs/clap)
+- **Web フレームワーク**: [axum](https://github.com/tokio-rs/axum) (REST / SSE)
 - **プログレスバー**: [indicatif](https://github.com/console-rs/indicatif)
 - **ブラウザ自動化 (CDP)**: [chromiumoxide](https://github.com/mattsse/chromiumoxide)
 - **シリアライズ / JSON**: [serde](https://serde.rs/), [serde_json](https://github.com/serde-rs/json)

@@ -90,6 +90,9 @@ pub struct ExportYmmpArgs {
     /// Chromium/Chrome実行ファイルのパス（省略時は自動検出）。
     #[arg(long)]
     pub chrome: Option<PathBuf>,
+    /// キーフレーム（中間点）削減の許容誤差（px / %）。0を指定すると全フレームを中間点として出力します。
+    #[arg(long, default_value_t = 0.5)]
+    pub tolerance: f64,
 }
 
 #[derive(Parser, Debug)]

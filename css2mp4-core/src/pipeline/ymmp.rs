@@ -14,6 +14,30 @@ pub async fn overwrite_ymmp_motion(
     ymmp_output: impl AsRef<Path>,
     timeline_index: usize,
     item_index: usize,
+    progress: impl ProgressSink,
+) -> Result<()> {
+    overwrite_ymmp_motion_with_tolerance(
+        opts,
+        selector,
+        ymmp_input,
+        ymmp_output,
+        timeline_index,
+        item_index,
+        0.5,
+        progress,
+    )
+    .await
+}
+
+/// 許容誤差 `tolerance` を指定してモーションを上書きするパイプライン。
+pub async fn overwrite_ymmp_motion_with_tolerance(
+    opts: &RenderOptions,
+    selector: &str,
+    ymmp_input: impl AsRef<Path>,
+    ymmp_output: impl AsRef<Path>,
+    timeline_index: usize,
+    item_index: usize,
+    tolerance: f64,
     mut progress: impl ProgressSink,
 ) -> Result<()> {
     opts.validate()?;
@@ -38,7 +62,7 @@ pub async fn overwrite_ymmp_motion(
         .item_mut(timeline_index, item_index)
         .ok_or_else(|| Error::InputNotFound(ymmp_input.as_ref().to_path_buf()))?;
 
-    samples.overwrite_item(item, opts.duration)?;
+    samples.overwrite_item_with_tolerance(item, opts.duration, tolerance)?;
     project.save(&ymmp_output)?;
 
     Ok(())
