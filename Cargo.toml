@@ -1,0 +1,6 @@
+[workspace]
+resolver = "2"
+members = [
+    "css2mp4-core",
+    "css2mp4-cli",
+]
