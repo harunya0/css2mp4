@@ -142,6 +142,9 @@ css2mp4/
 ├── Cargo.toml               # ワークスペース定義
 ├── README.md                # 本ドキュメント
 ├── todo.md                  # 開発ロードマップ & TODO
+├── samples/                 # HTML / CSS モーションサンプル集
+│   ├── 01-pop-in/           # ポップアップカード（バウンド・拡大）
+│   └── 02-slide-badge/      # スライドインバッジ
 ├── css2mp4-core/            # コアライブラリ
 │   ├── src/
 │   │   ├── lib.rs           # 公開モジュール定義・re-export

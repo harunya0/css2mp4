@@ -1,0 +1,60 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: transparent;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 36px;
+  background: #18181b;
+  color: #fafafa;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  font-weight: 700;
+  font-size: 22px;
+  letter-spacing: 1px;
+
+  /* 2.5秒のアニメーション */
+  animation: slideAndGlow 2.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.dot {
+  width: 14px;
+  height: 14px;
+  background-color: #22c55e;
+  border-radius: 50%;
+  box-shadow: 0 0 12px #22c55e;
+}
+
+@keyframes slideAndGlow {
+  0% {
+    opacity: 0;
+    transform: translateX(-150px) scale(0.8);
+  }
+  40% {
+    opacity: 1;
+    transform: translateX(15px) scale(1.04);
+  }
+  70% {
+    transform: translateX(-5px) scale(0.99);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0px) scale(1.0);
+  }
+}
